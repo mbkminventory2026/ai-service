@@ -1,0 +1,97 @@
+import os
+import joblib
+import pandas as pd
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+import uvicorn
+from tabpfn_client import set_access_token
+
+load_dotenv()
+
+# 1. Inisialisasi Model & Auth 
+TOKEN_TABPFN = os.getenv("TABPFN_TOKEN")
+
+if not TOKEN_TABPFN:
+    raise ValueError("ERROR: TABPFN_TOKEN tidak ditemukan! Pastikan file .env sudah dibuat dan diisi.")
+
+set_access_token(TOKEN_TABPFN)
+
+print("Memuat model TabPFN...")
+model_ai = joblib.load('model_tabpfn_production.pkl')
+print("Model siap digunakan!")
+
+app = FastAPI(title="Permatatex AI Estimation Service")
+
+# 2. Skema Request (DTO)
+class PredictionRequest(BaseModel):
+    qty_s: float
+    qty_m: float
+    qty_l: float
+    qty_xl: float
+    qty_xxl: float
+    qty_total: float
+    jumlah_size: float
+    rasio_s: float
+    rasio_m: float
+    rasio_l: float
+    rasio_xl: float
+    rasio_xxl: float
+    jenis: float
+    men_women: float
+    panjang_01: float
+    embro: float
+    furing: float
+    cutting_in_house: float
+    konsumsi_kain_per_pcs: float
+    jenis_kain: float
+
+# 3. Endpoint Prediksi
+@app.post("/api/v1/predict")
+def predict_schedule(data: PredictionRequest):
+    try:
+        # Mapping struktur JSON ke dalam kolom Pandas yang persis dengan format training
+        df_input = pd.DataFrame([{
+            'QTY S': data.qty_s,
+            'QTY M': data.qty_m,
+            'QTY L': data.qty_l,
+            'QTY XL': data.qty_xl,
+            'QTY XXL': data.qty_xxl,
+            'QTY Total': data.qty_total,
+            'Jumlah Size': data.jumlah_size,
+            'Rasio S': data.rasio_s,
+            'Rasio M': data.rasio_m,
+            'Rasio L': data.rasio_l,
+            'Rasio XL': data.rasio_xl,
+            'Rasio XXL': data.rasio_xxl,
+            'Jenis': data.jenis,
+            'Men/Women': data.men_women,
+            'Panjang 0/1': data.panjang_01,
+            'Embro': data.embro,
+            'Furing': data.furing,
+            'Cutting in House': data.cutting_in_house,
+            'Konsumsi Kain per pcs': data.konsumsi_kain_per_pcs,
+            'Jenis Kain': data.jenis_kain
+        }])
+
+        # Eksekusi prediksi menggunakan model TabPFN
+        hasil_prediksi = model_ai.predict(df_input)
+
+        # Mengembalikan format JSON standar agar mudah di-parsing oleh Golang (Struct)
+        return {
+            "status": "success",
+            "message": "Estimasi jadwal produksi berhasil dikalkulasi",
+            "data": {
+                "estimasi_waktu_total_hari": round(float(hasil_prediksi[0][0]), 1),
+                "estimasi_tahap_cutting_hari": round(float(hasil_prediksi[0][1]), 1),
+                "estimasi_tahap_sewing_hari": round(float(hasil_prediksi[0][2]), 1),
+                "estimasi_tahap_qc_hari": round(float(hasil_prediksi[0][3]), 1)
+            }
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Gagal melakukan prediksi: {str(e)}")
+
+# 4. Run Server
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=8000)
