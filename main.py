@@ -3,9 +3,11 @@ import joblib
 import pandas as pd
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 from tabpfn_client import set_access_token
+import traceback
 
 load_dotenv()
 
@@ -22,6 +24,14 @@ model_ai = joblib.load('model_tabpfn_production.pkl')
 print("Model siap digunakan!")
 
 app = FastAPI(title="Permatatex AI Estimation Service")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # 2. Skema Request (DTO)
 class PredictionRequest(BaseModel):
@@ -90,6 +100,7 @@ def predict_schedule(data: PredictionRequest):
         }
 
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Gagal melakukan prediksi: {str(e)}")
 
 # 4. Run Server
