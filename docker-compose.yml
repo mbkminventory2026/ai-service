@@ -1,0 +1,32 @@
+services:
+  dev:
+    container_name: permatatex-ai-dev
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    networks:
+      - permatatex-net
+
+  app:
+    container_name: permatatex-ai-service
+    profiles: [ "production" ]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    networks:
+      - permatatex-net
+
+networks:
+  permatatex-net:
+    driver: bridge

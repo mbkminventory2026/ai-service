@@ -8,17 +8,13 @@ dev:
 	uvicorn main:app --reload --port $(PORT)
 
 docker-up:
-	docker build -t $(APP_NAME) .
-	-docker stop $(CONTAINER_NAME)
-	-docker rm $(CONTAINER_NAME)
-	docker run -d --name $(CONTAINER_NAME) -p $(PORT):$(PORT) --env-file .env $(APP_NAME)
+	docker compose up --build -d
 
 docker-down:
-	-docker stop $(CONTAINER_NAME)
-	-docker rm $(CONTAINER_NAME)
+	docker compose down
 
 docker-logs:
-	docker logs -f $(CONTAINER_NAME)
+	docker compose logs -f
 
 clean: docker-down
 	-docker rmi $(APP_NAME)
