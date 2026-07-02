@@ -30,22 +30,6 @@ print("Memuat model TabPFN...")
 model_ai = joblib.load('model_tabpfn_production.pkl')
 print("Model siap digunakan!")
 
-# Warm-up: pre-cache training data ke TabPFN cloud supaya request pertama tidak lambat
-try:
-    print("Warming up TabPFN cache...")
-    _warmup_df = pd.DataFrame([{
-        'QTY S': 1, 'QTY M': 1, 'QTY L': 1, 'QTY XL': 1, 'QTY XXL': 1,
-        'QTY Total': 5, 'Jumlah Size': 5,
-        'Rasio S': 20.0, 'Rasio M': 20.0, 'Rasio L': 20.0, 'Rasio XL': 20.0, 'Rasio XXL': 20.0,
-        'Jenis': 1, 'Men/Women': 1, 'Panjang 0/1': 0,
-        'Embro': 1, 'Furing': 1, 'Cutting in House': 1,
-        'Konsumsi Kain per pcs': 1, 'Jenis Kain': 5
-    }])
-    model_ai.predict(_warmup_df)
-    print("Warm-up selesai!")
-except Exception as e:
-    print(f"Warm-up gagal (tidak masalah, request tetap bisa jalan): {e}")
-
 app = FastAPI(title="Permatatex AI Estimation Service")
 
 app.add_middleware(
