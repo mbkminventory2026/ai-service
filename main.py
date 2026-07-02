@@ -1,3 +1,10 @@
+import socket as _socket
+# ponytail: force IPv4 — Docker container has broken IPv6 routing (no routes but kernel IPv6 enabled), httpx picks IPv6 causing SSL handshake timeout
+_orig_getaddrinfo = _socket.getaddrinfo
+def _ipv4_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+    return _orig_getaddrinfo(host, port, _socket.AF_INET, type, proto, flags)
+_socket.getaddrinfo = _ipv4_getaddrinfo
+
 import os
 import joblib
 import pandas as pd
@@ -11,7 +18,7 @@ import traceback
 
 load_dotenv()
 
-# 1. Inisialisasi Model & Auth 
+# 1. Inisialisasi Model & Auth
 TOKEN_TABPFN = os.getenv("TABPFN_TOKEN")
 
 if not TOKEN_TABPFN:
@@ -22,6 +29,22 @@ set_access_token(TOKEN_TABPFN)
 print("Memuat model TabPFN...")
 model_ai = joblib.load('model_tabpfn_production.pkl')
 print("Model siap digunakan!")
+
+# Warm-up: pre-cache training data ke TabPFN cloud supaya request pertama tidak lambat
+try:
+    print("Warming up TabPFN cache...")
+    _warmup_df = pd.DataFrame([{
+        'QTY S': 1, 'QTY M': 1, 'QTY L': 1, 'QTY XL': 1, 'QTY XXL': 1,
+        'QTY Total': 5, 'Jumlah Size': 5,
+        'Rasio S': 20.0, 'Rasio M': 20.0, 'Rasio L': 20.0, 'Rasio XL': 20.0, 'Rasio XXL': 20.0,
+        'Jenis': 1, 'Men/Women': 1, 'Panjang 0/1': 0,
+        'Embro': 1, 'Furing': 1, 'Cutting in House': 1,
+        'Konsumsi Kain per pcs': 1, 'Jenis Kain': 5
+    }])
+    model_ai.predict(_warmup_df)
+    print("Warm-up selesai!")
+except Exception as e:
+    print(f"Warm-up gagal (tidak masalah, request tetap bisa jalan): {e}")
 
 app = FastAPI(title="Permatatex AI Estimation Service")
 
@@ -60,7 +83,6 @@ class PredictionRequest(BaseModel):
 @app.post("/api/v1/predict")
 def predict_schedule(data: PredictionRequest):
     try:
-        # Mapping struktur JSON ke dalam kolom Pandas yang persis dengan format training
         df_input = pd.DataFrame([{
             'QTY S': data.qty_s,
             'QTY M': data.qty_m,
@@ -84,10 +106,8 @@ def predict_schedule(data: PredictionRequest):
             'Jenis Kain': data.jenis_kain
         }])
 
-        # Eksekusi prediksi menggunakan model TabPFN
         hasil_prediksi = model_ai.predict(df_input)
 
-        # Mengembalikan format JSON standar agar mudah di-parsing oleh Golang (Struct)
         return {
             "status": "success",
             "message": "Estimasi jadwal produksi berhasil dikalkulasi",
